@@ -1,0 +1,14 @@
+Tux Meteor is a meteor counting program.
+
+It logs the time of each meteor, and which key or button was used to
+log it, so you can use different keys/buttons for different brightnesses
+or parts of the sky.
+
+The log file is $HOME/.tuxmeteor/meteors
+It appends to the current file.
+
+Type "make" to build Tux Meteor.
+
+When you run tuxmeteor, q will quit; any other key or mouse button
+will count as a meteor.
+
