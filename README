@@ -1,14 +1,21 @@
-Tux Meteor is a meteor counting program.
+Tux Meteor is a meteor counting program, written by Akkana Peck.
 
 It logs the time of each meteor, and which key or button was used to
 log it, so you can use different keys/buttons for different brightnesses
 or parts of the sky.
 
-The log file is $HOME/.tuxmeteor/meteors
-It appends to the current file.
-
 Type "make" to build Tux Meteor.
+By default, it will try to find your X11 libraries and build with them.
+If it gets this wrong, or if you want to override the default and build
+with or without X, see the comments at the beginning of the Makefile.
 
-When you run tuxmeteor, q will quit; any other key or mouse button
-will count as a meteor.
+When you run tuxmeteor, q will quit; any other key (or mouse button,
+if you've built with X11) will count as a meteor.
+tuxmeteor -t will run in terminal mode
+(useful if you've built with X11 support).
 
+The log file is $HOME/.tuxmeteor/meteors
+It appends to the existing file if one is already there.
+
+More information on Tux Meteor, and the latest release, can be found at:
+http://shallowsky.com/software/tuxmeteor.html

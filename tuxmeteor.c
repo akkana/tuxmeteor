@@ -12,20 +12,26 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/errno.h>
+#include <termios.h>
+#include <unistd.h>
+#include <string.h>
 
+#ifndef NO_X11
 #include <X11/Xlib.h>
 #include <X11/keysym.h>
 #include <X11/Xutil.h>    /* for XComposeStatus */
+
+static Display* dpy;
+static Window win;
+static Atom wm_delete_atom;
+static int screen;
+#endif /* NO_X11 */
 
 static char gDir[BUFSIZ];
 static char gFilename[BUFSIZ];
 
 static FILE* logFP = 0;
-static Display* dpy;
-static Window win;
 static int Count = 0;
-static int screen;
-static Atom wm_delete_atom;
 
 static FILE* OpenLogFile()
 {
@@ -54,15 +60,13 @@ static FILE* OpenLogFile()
     return logFP;
 }
 
-void InitWindow()
+int InitWindow()
 {
+#ifndef NO_X11
     Atom wm_protocols[1];
 
     if ((dpy = XOpenDisplay(getenv("DISPLAY"))) == 0)
-    {
-        fprintf(stderr, "Can't open display: %s\n", getenv("DISPLAY"));
-        exit(1);
-    }
+        return -1;
     screen = DefaultScreen(dpy);
 
     win = XCreateSimpleWindow(dpy, RootWindow(dpy, screen),
@@ -85,14 +89,44 @@ void InitWindow()
     XSetWMProtocols(dpy, win, wm_protocols, 1);
 
     XMapWindow(dpy, win);
+    return 0;
+#else /* NO_X11 */
+    return -1;
+#endif /* NO_X11 */
+}
+
+static struct termios termios_sav;
+
+int InitTerminal()
+{
+    struct termios termios;
+    if (tcgetattr(0, &termios) != 0) {
+        perror("Couldn't get terminal modes!\n");
+        return -1;
+    }
+    termios_sav = termios;
+    cfmakeraw(&termios);
+    if (tcsetattr(0, TCSANOW, &termios) != 0)
+    {
+        perror("Couldn't set raw mode!\n");
+        return -1;
+    }
+    return 0;
+}
+
+void ResetTerminal()
+{
+    tcsetattr(0, TCSANOW, &termios_sav);
 }
 
 void LogMeteor(char ch)
 {
+#ifndef NO_X11
     static GC gc = 0;
-    time_t sec;
     static int x0, y0, w, h;
     static char str[]    = "Meteors counted: ____________________";
+#endif /* NO_X11 */
+    time_t sec;
 
     ++Count;
     time(&sec);
@@ -105,6 +139,7 @@ void LogMeteor(char ch)
     if (Count % 200 == 0)
         fflush(logFP);
 
+#ifndef NO_X11
     if (dpy) {
         if (!gc) {
             gc = XCreateGC(dpy, win,  0, 0);
@@ -138,15 +173,82 @@ void LogMeteor(char ch)
         
         if (gc) {
             sprintf(str+17, "%-20d", Count);
-            //XClearArea(dpy, win, x0, y0, w, h, 0);
-            //XDrawRectangle(dpy, win, gc, x0, y0, w, h);
             XDrawImageString(dpy, win, gc, x0, y0+h, str, (sizeof str)-1);
         }
     }
+#endif /* NO_X11 */
+    printf("\rMeteors logged: %d ", Count);
 }
 
 int HandleEvent()
 {
+    static char pendingStr[15];
+    static int pendingStrLen = 0;
+    static const char *escSeq[] = {
+        "\033[A", "\033[B", "\033[C", "\033[D"
+    };
+    static const char escMatches[] = {
+        '^', 'v', '>', '<'
+    };
+#define NUM_ESC_SEQ ((sizeof escSeq / sizeof *escSeq))
+
+    char c = getchar();
+
+    /* If we have an escape sequence pending,
+     * see if it matches any of our known escape sequences.
+     */
+    if (pendingStrLen > 0)
+    {
+        int i;
+        int matching = 0;
+        pendingStr[pendingStrLen++] = c;
+        if (pendingStrLen > sizeof pendingStr) {  /* check for overflow */
+            LogMeteor('?');
+            pendingStrLen = 0;
+            return 0;
+        }
+        for (i=0; i < NUM_ESC_SEQ; ++i) {
+            if (!strncmp(escSeq[i], pendingStr, pendingStrLen)) {
+                matching = 1;
+                if (strlen(escSeq[i]) == pendingStrLen) {
+                    LogMeteor(escMatches[i]);
+                    pendingStrLen = 0;
+                    return 0;
+                }
+            }
+        }
+        if (matching)
+            return 0;
+
+        /* If we don't match any known escape sequences,
+         * then log entries for every keystroke we got.
+         * Someone will have to sort it out later.
+         */
+        for (i=0; i<pendingStrLen; ++i)
+            LogMeteor(pendingStr[i]);
+        pendingStrLen = 0;
+        return 0;
+    }
+
+    if (c == 'q')
+        return -1;
+
+    /* Try to deal with escape sequences -- start a "pending string". */
+    if (c == '\033')  /* ESC */
+    {
+        pendingStr[pendingStrLen++] = c;
+        return 0;
+    }
+
+    /* Else just log it, don't do anything special */
+    LogMeteor(c);
+    pendingStrLen = 0;
+    return 0;
+}
+
+int XHandleEvent()
+{
+#ifndef NO_X11
     XEvent event;
     char buffer[20];
     KeySym keysym;
@@ -192,28 +294,62 @@ int HandleEvent()
           printf("Unknown event: %d\n", event.type);
           break;
     }
+#endif /* NO_X11 */
     return 0;
 }
 
-main()
+int main(int argc, char **argv)
 {
     time_t sec;
+    int i;
+    int useX = 1;
+
+    for (i=1; i<argc; ++i)
+    {
+        if (argv[i][0] == '-')
+        {
+            switch (argv[i][1])
+            {
+              case 't':
+                  useX = 0;
+                  printf("Tux Meteor: Terminal Mode\n");
+                  break;
+              case 'v':
+                  printf("Tux Meteor, v. %s.  ", VERSION);
+                  printf("Copyright 2002, Akkana Peck\n");
+                  printf("Usage: tuxmeteor [-tv]\n");
+                  printf("  -t: use terminal mode (no X)\n");
+                  exit(0);
+            }
+        }
+    }
 
     logFP = OpenLogFile();
 
-    InitWindow();
+    if (!useX || ( InitWindow() != 0))
+    {
+        useX = 0;
+        if (InitTerminal() != 0)
+        {
+            printf("Couldn't initialize either X or terminal -- exiting\n");
+            exit(1);
+        }
+    }
 
     time(&sec);
     fprintf(logFP, "Meteor count started on %s", ctime(&sec));
 
-    while (HandleEvent() >= 0)
+    while ((useX ? XHandleEvent() : HandleEvent()) >= 0)
         ;
 
     time(&sec);
     fprintf(logFP, "%d meteors counted\n", Count);
     fprintf(logFP, "Meteor count stopped on %s\n", ctime(&sec));
     fclose(logFP);
-    printf("%d meteors counted, output written to %s\n", Count, gFilename);
+    if (!useX)
+        ResetTerminal();
+    printf("%d meteors counted\nOutput written to %s\n", Count, gFilename);
+    return 0;
 }
 
 
