@@ -1,4 +1,4 @@
-#! /usr/bin/env python2
+#! /usr/bin/env python3
 
 # Take a data file from tuxmeteor, and translate the date strings to unix time
 # so they can be plotted by gnuplot.
@@ -8,7 +8,7 @@
 #
 # Copyright 2002 by Akkana Peck, you may reuse under the GPL, yada yada.
 
-def main () :
+def main():
     import os
     import sys
     import string
@@ -16,42 +16,43 @@ def main () :
 
     argc = 1
 
-    if len(sys.argv) <= 1 :
+    if len(sys.argv) <= 1:
         binsize = 60
-    else :
+    else:
         try:
-            binsize = string.atoi(sys.argv[1])
+            binsize = int(sys.argv[1])
             argc = 2
             # you'd think ++argc would be better, but it's still 1 after that
         except ValueError:
             binsize = 60
 
-    try :
+    try:
         fp = open(sys.argv[argc], "r")
     except:
         fp = open("meteors", "r")
 
     curbin = 0;
 
-    while 1 :
+    while True:
         line = fp.readline()
-        if not line: break;
-	# Parse the time, which is in line[2:] if it's a time line
-        datestr = line[2:]
-	# d = time.strptime(datestr, "%a %b %d %H:%M:%S %Y")
+        if not line: break
+        # Parse the time, which is in line[2:] if it's a time line
         try:
-            d = time.strptime(line[2:])
+            datestr = line[2:].strip()
+            # d = time.strptime(datestr, "%a %b %d %H:%M:%S %Y")
+            d = time.strptime(datestr)
         except ValueError:
             continue
 
         curtime = time.mktime(d)
-        if (curbin == 0) :
+        if (curbin == 0):
             starttime = curtime
-        if (int(curtime / binsize) > curbin) :
-            if (curbin > 0) :
-                print curbin*binsize - starttime, count
+        if (int(curtime / binsize) > curbin):
+            if (curbin > 0):
+                print(curbin*binsize - starttime, count)
             count = 0
             curbin = int(curtime / binsize)
+
         count = count + 1
 
 main()

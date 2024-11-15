@@ -1,0 +1,7 @@
+*.o
+*.a
+tuxmeteor
+build-stamp
+configure-stamp
+pho.debhelper.log
+
