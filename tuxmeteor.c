@@ -15,6 +15,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <string.h>
+#include <limits.h>
 
 #ifndef NO_X11
 #include <X11/Xlib.h>
@@ -27,8 +28,9 @@ static Atom wm_delete_atom;
 static int screen;
 #endif /* NO_X11 */
 
-static char gDir[BUFSIZ];
-static char gFilename[BUFSIZ];
+static char gDir[PATH_MAX];
+static char gFilename[PATH_MAX + FILENAME_MAX];
+char errmsg[BUFSIZ + PATH_MAX + FILENAME_MAX];
 
 static FILE* logFP = 0;
 static int Count = 0;
@@ -42,8 +44,8 @@ static FILE* OpenLogFile()
     {
         if (mkdir(gDir, 0755) != 0)
         {
-            sprintf(gFilename, "\07Can't create %s", gDir);
-            perror(gFilename);
+            sprintf(errmsg, "\07Can't create %s", gDir);
+            perror(errmsg);
             exit(errno);
         }
     }
@@ -52,8 +54,8 @@ static FILE* OpenLogFile()
 
     if ((logFP = fopen(gFilename, "a")) == 0)
     {
-        sprintf(gDir, "\07Can't open %s", gFilename);
-        perror(gDir);
+        sprintf(errmsg, "\07Can't open %s", gFilename);
+        perror(errmsg);
         exit(errno);
     }
 
@@ -170,7 +172,7 @@ void LogMeteor(char ch)
                 XChangeGC(dpy, gc, GCForeground|GCBackground, &values);
             }
         }
-        
+
         if (gc) {
             sprintf(str+17, "%-20d", Count);
             XDrawImageString(dpy, win, gc, x0, y0+h, str, (sizeof str)-1);
